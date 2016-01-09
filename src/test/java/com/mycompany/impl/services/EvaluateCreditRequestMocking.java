@@ -102,6 +102,9 @@ public class EvaluateCreditRequestMocking {
     public void tearDownDB() {
         jdbcTemplate.execute("DELETE FROM CREDIT");
         jdbcTemplate.execute("DELETE FROM CLIENT");
+        
+        jdbcTemplate.execute("ALTER TABLE CREDIT AUTO_INCREMENT=1");
+        jdbcTemplate.execute("ALTER TABLE CLIENT AUTO_INCREMENT=1");
     }
 
     /**

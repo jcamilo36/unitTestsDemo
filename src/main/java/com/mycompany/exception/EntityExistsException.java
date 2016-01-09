@@ -13,6 +13,11 @@ import lombok.NoArgsConstructor;
 public class EntityExistsException extends RuntimeException {
 
     /**
+	 * Serial version uid.
+	 */
+	private static final long serialVersionUID = 7768605997584731234L;
+
+	/**
      * Exception message.
      */
     private String message;

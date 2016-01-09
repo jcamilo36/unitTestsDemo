@@ -18,11 +18,16 @@ import org.springframework.test.context.ContextConfiguration;
 import org.springframework.test.context.junit4.SpringJUnit4ClassRunner;
 import org.springframework.test.context.web.WebAppConfiguration;
 
+import java.sql.Types;
+import java.time.LocalDate;
+import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import static junit.framework.TestCase.assertTrue;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.is;
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertThat;
 
@@ -73,6 +78,9 @@ public class PeopleServiceTest {
     public void tearDownDB() {
         jdbcTemplate.execute("DELETE FROM CREDIT");
         jdbcTemplate.execute("DELETE FROM CLIENT");
+        
+        jdbcTemplate.execute("ALTER TABLE CREDIT AUTO_INCREMENT=1");
+        jdbcTemplate.execute("ALTER TABLE CLIENT AUTO_INCREMENT=1");
     }
 
     /**
@@ -112,6 +120,16 @@ public class PeopleServiceTest {
         PeopleDTO peopleDTO = new PeopleDTO(IDTypeEnum.NATIONAL_ID, "7890", "Luke",
                 "Skywalker", "luke@tatooine.com");
         peopleService.createClient(peopleDTO);
+        Object[] params = new Object[]{"NATIONAL_ID", "7890"};
+        int[] types = new int[]{Types.VARCHAR, Types.VARCHAR};
+        List<Map<String, Object>> list = jdbcTemplate.queryForList(
+        		"SELECT firstName, lastName, email FROM CLIENT WHERE typeId = ? AND clientId = ?",
+        		params, types);
+        assertEquals(1,list.size());
+        Map<String, Object> map = list.get(0);
+        assertEquals("Luke", map.get("firstName"));
+        assertEquals("Skywalker", map.get("lastName"));
+        assertEquals("luke@tatooine.com", map.get("email"));
     }
 
     /**

@@ -8,16 +8,28 @@ import com.mycompany.api.dto.IDTypeEnum;
 import com.mycompany.api.dto.RiskTypeEnum;
 import com.mycompany.api.services.ICreditEvalService;
 import com.mycompany.api.services.IPeopleService;
+import com.mycompany.exception.AccountBlockedException;
+import com.mycompany.exception.AccountDoesNotExistsException;
+import com.mycompany.exception.NotEnoughMoneyException;
+
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.datasource.DataSourceTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
+import org.springframework.transaction.TransactionException;
+import org.springframework.transaction.TransactionStatus;
+import org.springframework.transaction.TransactionSystemException;
+import org.springframework.transaction.support.DefaultTransactionDefinition;
 
 import javax.sql.DataSource;
 import java.math.BigDecimal;
 import java.sql.Types;
 import java.time.LocalDate;
+import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 /**
@@ -57,7 +69,7 @@ public class CreditEvalServiceImpl implements ICreditEvalService {
      */
     @Autowired
     private ICreditFirmABC creditFirmABC;
-
+    
     /**
      * JDBC client.
      */
@@ -92,7 +104,9 @@ public class CreditEvalServiceImpl implements ICreditEvalService {
                             requestDTO.getCurrentSalary(),
                             riskAnalysisDTO.riskTypeEnum);
             BigDecimal quota = evaluateCreditAmount(evaluateQuotaInDTO);
-            assignCredit(clientDTO, quota);
+            if (quota.compareTo(BigDecimal.ZERO) > 0) {
+            	assignCredit(clientDTO, quota);
+            }
         });
     }
 
@@ -188,7 +202,136 @@ public class CreditEvalServiceImpl implements ICreditEvalService {
                 params, types, BigDecimal.class);
         return total;
     }
-
+    
+//    @Override
+//	public void payCredit(String accountOrigin, String accountTarget, Long creditId) 
+//			throws AccountBlockedException, AccountDoesNotExistsException, 
+//			NotEnoughMoneyException {
+//    	
+//    	// Check for account existance
+//    	String queryAccountExist = "SELECT id FROM ACCOUNT WHERE number = ?";
+//    	Object[] params = new Object[]{accountOrigin};
+//        int[] types = new int[]{Types.VARCHAR};
+//    	List<BigDecimal> list = jdbcTemplate.queryForList(
+//    			queryAccountExist, params, types, BigDecimal.class);
+//    	if (list == null || list.isEmpty()) 
+//    		throw new AccountDoesNotExistsException("Account origin does not exists", null);
+//    	
+//    	params = new Object[]{accountTarget};
+//        types = new int[]{Types.VARCHAR};
+//    	list = jdbcTemplate.queryForList(
+//    			queryAccountExist, params, types, BigDecimal.class);
+//    	if (list == null || list.isEmpty())
+//    		throw new AccountDoesNotExistsException("Account target does not exists", null);
+//    	
+//    	// Query for credit debt
+//    	params = new Object[]{creditId};
+//        types = new int[]{Types.NUMERIC};
+//		BigDecimal creditValue = jdbcTemplate.queryForObject(
+//				"SELECT creditValue FROM CREDIT WHERE id = ?",
+//				params, types, BigDecimal.class);
+//    	
+//    	// Check account status
+//    	params = new Object[]{accountOrigin};
+//        types = new int[]{Types.VARCHAR};
+//    	Map<String, Object> mapRes = jdbcTemplate.queryForMap(
+//    			"SELECT total, blocked FROM ACCOUNT WHERE number = ?",
+//    			params, types);
+//    	if (mapRes != null && mapRes.containsKey("total")) {
+//    		BigDecimal total = (BigDecimal) mapRes.get("total");
+//    		if (total != null && total.compareTo(creditValue) < 0) 
+//    			throw new NotEnoughMoneyException("Not enough money in account.", null);
+//    	}
+//		if (mapRes != null && mapRes.containsKey("blocked")) {
+//			Boolean blocked = (Boolean) mapRes.get("blocked");
+//			if (blocked != null && blocked)
+//				throw new AccountBlockedException("Account is blocked.", null);
+//		}
+//    	
+//		// Perform debit and credit
+//		params = new Object[]{creditValue, accountOrigin};
+//		types = new int[]{Types.DECIMAL, Types.VARCHAR};
+//		jdbcTemplate.update(
+//				"UPDATE ACCOUNT SET total = (total - ?) WHERE number = ?",
+//				params, types);
+//		
+//		params = new Object[]{creditValue, accountTarget};
+//		types = new int[]{Types.DECIMAL, Types.VARCHAR};
+//		jdbcTemplate.update(
+//				"UPDATE ACCOUNT SET total = (total + ?) WHERE number = ?",
+//				params, types);
+//	}
+    
+    
+//	@Override
+//	public void payCredit(String accountOrigin, String accountTarget, Long creditId)
+//			throws AccountBlockedException, AccountDoesNotExistsException, NotEnoughMoneyException {
+//		checkAccountExist(accountOrigin, accountTarget);
+//		
+//		// Query for credit debt
+//		Object[] params = new Object[] { creditId };
+//		int[] types = new int[] { Types.NUMERIC };
+//		BigDecimal creditValue = jdbcTemplate.queryForObject("SELECT creditValue FROM CREDIT WHERE id = ?", 
+//				params, types, BigDecimal.class);
+//		
+//		checkAccountStatus(accountOrigin, creditValue);
+//		
+//		// Perform debit and credit
+//		TransactionDefinition txDef = new DefaultTransactionDefinition();
+//		DataSourceTransactionManager transactionManager = new DataSourceTransactionManager(jdbcTemplate.getDataSource());
+//		TransactionStatus txStatus = transactionManager.getTransaction(txDef);
+//		try {
+//			params = new Object[] { creditValue, accountOrigin };
+//			types = new int[] { Types.DECIMAL, Types.VARCHAR };
+//			jdbcTemplate.update("UPDATE ACCOUNT SET total = (total - ?) WHERE number = ?", params, types);
+//
+//			params = new Object[] { creditValue, accountTarget };
+//			types = new int[] { Types.DECIMAL, Types.VARCHAR };
+//			jdbcTemplate.update("UPDATE ACCOUNT SET total = (total + ?) WHERE number = ?", params, types);
+//			transactionManager.commit(txStatus);
+//		} catch (Exception e) {
+//			transactionManager.rollback(txStatus);
+//			throw new TransactionSystemException(e.getMessage(), e);
+//		}
+//	}
+    
+//    private void checkAccountExist(String accountOrigin, String accountTarget) 
+//    	throws AccountDoesNotExistsException {
+//    	// Check for account existance
+//    	String queryAccountExist = "SELECT id FROM ACCOUNT WHERE number = ?";
+//    	Object[] params = new Object[]{accountOrigin};
+//        int[] types = new int[]{Types.VARCHAR};
+//    	List<BigDecimal> list = jdbcTemplate.queryForList(
+//    			queryAccountExist, params, types, BigDecimal.class);
+//    	if (list == null || list.isEmpty()) 
+//    		throw new AccountDoesNotExistsException("Account origin does not exists", null);
+//    	
+//    	params = new Object[]{accountTarget};
+//        types = new int[]{Types.VARCHAR};
+//    	list = jdbcTemplate.queryForList(
+//    			queryAccountExist, params, types, BigDecimal.class);
+//    	if (list == null || list.isEmpty())
+//    		throw new AccountDoesNotExistsException("Account target does not exists", null);
+//    }
+//
+//	private void checkAccountStatus(String accountOrigin, BigDecimal creditValue) 
+//		throws NotEnoughMoneyException, AccountBlockedException {
+//		Object[] params = new Object[] { accountOrigin };
+//		int[] types = new int[] { Types.VARCHAR };
+//		Map<String, Object> mapRes = jdbcTemplate.queryForMap("SELECT total, blocked FROM ACCOUNT WHERE number = ?",
+//				params, types);
+//		if (mapRes != null && mapRes.containsKey("total")) {
+//			BigDecimal total = (BigDecimal) mapRes.get("total");
+//			if (total != null && total.compareTo(creditValue) < 0)
+//				throw new NotEnoughMoneyException("Not enough money in account.", null);
+//		}
+//		if (mapRes != null && mapRes.containsKey("blocked")) {
+//			Boolean blocked = (Boolean) mapRes.get("blocked");
+//			if (blocked != null && blocked)
+//				throw new AccountBlockedException("Account is blocked.", null);
+//		}
+//	}
+    
     /**
      * DTO with result from risk analysis.
      */

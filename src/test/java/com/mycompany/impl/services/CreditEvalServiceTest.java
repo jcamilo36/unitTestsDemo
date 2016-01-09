@@ -2,6 +2,10 @@ package com.mycompany.impl.services;
 
 import com.mycompany.api.dto.EvaluateQuotaInDTO;
 import com.mycompany.api.dto.RiskTypeEnum;
+import com.mycompany.exception.AccountBlockedException;
+import com.mycompany.exception.AccountDoesNotExistsException;
+import com.mycompany.exception.NotEnoughMoneyException;
+
 import common.ObjectBuilder;
 import common.TestContextConfiguration;
 import org.junit.After;
@@ -17,9 +21,11 @@ import org.springframework.test.context.junit4.SpringJUnit4ClassRunner;
 import org.springframework.test.context.web.WebAppConfiguration;
 
 import java.math.BigDecimal;
+import java.sql.Types;
 
 import static org.hamcrest.Matchers.is;
 import static org.junit.Assert.assertThat;
+import static org.junit.Assert.fail;
 
 /**
  * Tests credit evaluation service.
@@ -66,8 +72,13 @@ public class CreditEvalServiceTest {
      */
     @After
     public void tearDownDB() {
+    	jdbcTemplate.execute("DELETE FROM ACCOUNT");
         jdbcTemplate.execute("DELETE FROM CREDIT");
         jdbcTemplate.execute("DELETE FROM CLIENT");
+        
+        jdbcTemplate.execute("ALTER TABLE ACCOUNT AUTO_INCREMENT=1");
+        jdbcTemplate.execute("ALTER TABLE CREDIT AUTO_INCREMENT=1");
+        jdbcTemplate.execute("ALTER TABLE CLIENT AUTO_INCREMENT=1");
     }
 
     /**
@@ -76,7 +87,7 @@ public class CreditEvalServiceTest {
     private void setupScenario0() {
         jdbcTemplate.execute(
                 "INSERT INTO CLIENT (id, typeId, clientId, firstName, lastName, email) "
-                        + "VALUES (1, 'Passport', 'ABC123', 'Homer', 'Simpson', "
+                        + "VALUES (1, 'passport', 'ABC123', 'Homer', 'Simpson', "
                         + "'homer@springfield.com')");
     }
 
@@ -88,6 +99,59 @@ public class CreditEvalServiceTest {
         jdbcTemplate.execute(
                 "INSERT INTO CREDIT (clientId, creditValue, approvalDate, paidDate) "
                     + "VALUES (1, 200000, DATE '2015/01/01', NULL)");
+    }
+    
+    /**
+     * Create a test scenario with a credit and 2 accounts.
+     */
+    private void setupScenario2() {
+    	setupScenario1();
+    	jdbcTemplate.execute(
+                "INSERT INTO CLIENT (id, typeId, clientId, firstName, lastName, email) "
+                        + "VALUES (99, 'national id', '987654321', 'Montgomery', 'Burns', "
+                        + "'bank@springfield.com')");
+    	jdbcTemplate.execute(
+        		"INSERT INTO ACCOUNT (id, number, clientId, total)"
+        		+ "VALUES (1,'123',1,1000000)");
+    	jdbcTemplate.execute(
+        		"INSERT INTO ACCOUNT (id, number, clientId, total)"
+        		+ "VALUES (99,'QWE',1,5000000000)");
+    }
+    
+    /**
+     * Create a test scenario with a credit and 2 accounts. The client
+     * account has no money.
+     */
+    private void setupScenario3() {
+    	setupScenario1();
+    	jdbcTemplate.execute(
+                "INSERT INTO CLIENT (id, typeId, clientId, firstName, lastName, email) "
+                        + "VALUES (99, 'national id', '987654321', 'Montgomery', 'Burns', "
+                        + "'bank@springfield.com')");
+    	jdbcTemplate.execute(
+        		"INSERT INTO ACCOUNT (id, number, clientId, total)"
+        		+ "VALUES (1,'123',1,0)");
+    	jdbcTemplate.execute(
+        		"INSERT INTO ACCOUNT (id, number, clientId, total)"
+        		+ "VALUES (99,'QWE',1,5000000000)");
+    }
+    
+    /**
+     * Create a test scenario with a credit and 2 accounts. The client account
+     * is blocked.
+     */
+    private void setupScenario4() {
+    	setupScenario1();
+    	jdbcTemplate.execute(
+                "INSERT INTO CLIENT (id, typeId, clientId, firstName, lastName, email) "
+                        + "VALUES (99, 'national id', '987654321', 'Montgomery', 'Burns', "
+                        + "'bank@springfield.com')");
+    	jdbcTemplate.execute(
+        		"INSERT INTO ACCOUNT (id, number, clientId, total, blocked)"
+        		+ "VALUES (1,'123',1,1000000, true)");
+    	jdbcTemplate.execute(
+        		"INSERT INTO ACCOUNT (id, number, clientId, total)"
+        		+ "VALUES (99,'QWE',1,5000000000)");
     }
 
     /**
@@ -159,4 +223,79 @@ public class CreditEvalServiceTest {
         exception.expect(IllegalArgumentException.class);
         creditEvalService.evaluateCreditAmount(inDTO);
     }
+    
+    /**
+     * Test credit amount evaluation where risk is SEIZED
+     */
+    @Test
+    public void evaluateCreditAmountTest6() {
+        EvaluateQuotaInDTO inDTO = new EvaluateQuotaInDTO();
+        inDTO.setCurrentSalary(new BigDecimal(2000000));
+        inDTO.setMaxPastCredit(new BigDecimal(6500000));
+        inDTO.setTotalCurrentCredit(new BigDecimal(200000));
+        inDTO.setRiskTypeEnum(RiskTypeEnum.SEIZED);
+        BigDecimal quota = creditEvalService.evaluateCreditAmount(inDTO);
+        assertThat(quota, is(BigDecimal.ZERO));
+    }
+    
+//    /**
+//     * Test that a credit is marked as paid and the amount
+//     * is discounted from the account.
+//     */
+//    @Test
+//    public void paidCreditTest1() {
+//    	setupScenario2();
+//    	try {
+//	    	creditEvalService.payCredit("123", "QWE", 1L);
+//	    	
+//	    	Object[] params = new Object[]{"123"};
+//	        int[] types = new int[]{Types.NUMERIC};
+//	    	BigDecimal total = jdbcTemplate.queryForObject(
+//	    			"SELECT total FROM ACCOUNT WHERE number = ?",
+//	    			params, types, BigDecimal.class);
+//	    	assertThat(total, is(new BigDecimal("800000")));
+//	    	
+//	    	params = new Object[]{"QWE"};
+//	        types = new int[]{Types.VARCHAR};
+//	    	total = jdbcTemplate.queryForObject(
+//	    			"SELECT total FROM ACCOUNT WHERE number = ?",
+//	    			params, types, BigDecimal.class);
+//	    	assertThat(total, is(new BigDecimal("5000200000")));
+//    	} catch (Exception e) {
+//    		e.printStackTrace();
+//    		fail(e.getMessage());
+//    	}
+//    }
+//    
+//    /**
+//     * Test that an exception is thrown if the account doesn't
+//     * exists.
+//     */
+//    @Test
+//    public void paidCreditTest2() throws Exception {
+//    	setupScenario2();
+//    	exception.expect(AccountDoesNotExistsException.class);
+//    	creditEvalService.payCredit("111", "QWE", 1L);
+//    }
+//    
+//    /**
+//     * Test that an exception is thrown if there is no
+//     * money enough to pay.
+//     */
+//    @Test
+//    public void paidCreditTest3() throws Exception {
+//    	setupScenario3();
+//    	exception.expect(NotEnoughMoneyException.class);
+//    	creditEvalService.payCredit("123", "QWE", 1L);
+//    }
+//    
+//    /**
+//     * Test that an exception is the account is blocked.
+//     */
+//    @Test
+//    public void paidCreditTest4() throws Exception {
+//    	setupScenario4();
+//    	exception.expect(AccountBlockedException.class);
+//    	creditEvalService.payCredit("123", "QWE", 1L);
+//    }
 }

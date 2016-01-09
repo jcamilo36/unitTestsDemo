@@ -79,6 +79,9 @@ public class EvaluateCreditAmountParameterizedTest {
     public void tearDownDB() {
         jdbcTemplate.execute("DELETE FROM CREDIT");
         jdbcTemplate.execute("DELETE FROM CLIENT");
+        
+        jdbcTemplate.execute("ALTER TABLE CREDIT AUTO_INCREMENT=1");
+        jdbcTemplate.execute("ALTER TABLE CLIENT AUTO_INCREMENT=1");
     }
 
     /**
@@ -153,6 +156,9 @@ public class EvaluateCreditAmountParameterizedTest {
             {new BigDecimal(2000000), new BigDecimal(5000000),
                     new BigDecimal(200000), new BigDecimal(4800000),
                     RiskTypeEnum.PLEDGE, false},
+            {new BigDecimal(2000000), new BigDecimal(6500000),
+                        new BigDecimal(200000), BigDecimal.ZERO,
+                        RiskTypeEnum.SEIZED, false},
             {new BigDecimal(-1), new BigDecimal(5000000),
                     new BigDecimal(200000), null, RiskTypeEnum.NONE, true},
             {new BigDecimal(2000000), new BigDecimal(-1),
